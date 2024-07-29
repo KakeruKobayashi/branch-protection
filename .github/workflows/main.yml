@@ -1,0 +1,65 @@
+name: プルリクが閉じられたときタグの作成を行う
+
+on:
+  pull_request:
+    branches:
+      - "parent"
+    types: [closed]
+
+jobs:
+  create_tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Get the latest tag
+        id: get_latest_tag
+        run: |
+          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+          if [ "$latest_tag" = "none" ]; then
+            latest_tag=""
+          fi
+          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+
+      - name: Calculate new tag
+        id: calculate_new_tag
+        run: |
+          latest_tag=${{ env.latest_tag }}
+          if [[ $latest_tag =~ ^beta-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major=${BASH_REMATCH[1]}
+            minor=${BASH_REMATCH[2]}
+            patch=${BASH_REMATCH[3]}
+            commit_message=$(git log --format=%B -n 1 ${{ github.event.pull_request.merge_commit_sha }})
+            if [[ "$commit_message" == "major"* ]]; then
+              new_major=$((major + 1))
+              new_minor=0
+              new_patch=0
+            elif [[ "$commit_message" == "minor"* ]]; then
+              new_major=$major
+              new_minor=$((minor + 1))
+              new_patch=0
+            elif [[ "$commit_message" == "patch"* ]]; then
+              new_major=$major
+              new_minor=$minor
+              new_patch=$((patch + 1))
+            else
+              echo "No matching branch pattern found."
+              exit 1
+            fi
+            new_tag="beta-v${new_major}.${new_minor}.${new_patch}"
+          fi
+          echo "new_tag=$new_tag" >> $GITHUB_ENV
+
+      - name: Create new tag
+        run: |
+          new_tag=${{ env.new_tag }}
+          git tag $new_tag
+          git push origin $new_tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
