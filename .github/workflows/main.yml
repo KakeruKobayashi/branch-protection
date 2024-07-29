@@ -36,6 +36,7 @@ jobs:
             minor=${BASH_REMATCH[2]}
             patch=${BASH_REMATCH[3]}
             commit_message=$(git log --format=%B -n 1 ${{ github.event.pull_request.merge_commit_sha }})
+            echo commit_message
             if [[ "$commit_message" == "major"* ]]; then
               new_major=$((major + 1))
               new_minor=0
